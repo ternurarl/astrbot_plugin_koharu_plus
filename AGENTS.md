@@ -1,4 +1,4 @@
-# astrbot_plugin_koharu Project Rules
+# astrbot_plugin_koharu_plus Project Rules
 
 Document only durable, repository-specific constraints here. Do not record current file
 layouts, temporary paths, or implementation details that may change during a refactor.
@@ -61,7 +61,7 @@ Normal Python, AstrBot plugin, and Git practices are assumed.
 
 ## What Not to Commit
 
-- Generated translation outputs (`data/plugin_data/astrbot_plugin_koharu/outputs/`),
+- Generated translation outputs (`data/plugin_data/astrbot_plugin_koharu_plus/outputs/`),
   model weights, or machine-specific artifacts.
 - `.venv/`, `venv/`, `__pycache__/`, `.env`, IDE configs (already covered by `.gitignore`).
 

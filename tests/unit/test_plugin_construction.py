@@ -54,7 +54,7 @@ async def test_constructor_defaults_fallback_to_default_config(
     assert plugin._str_conf("target_language") == DEFAULT_CONFIG["target_language"]
     assert plugin._int_conf("queue_depth") == 3
     assert getattr(plugin, "_queue_semaphore")._value == 4
-    assert plugin._data_dir == tmp_path / "plugin_data" / "astrbot_plugin_koharu"
+    assert plugin._data_dir == tmp_path / "plugin_data" / "astrbot_plugin_koharu_plus"
     assert not plugin._data_dir.exists()
 
     await plugin.initialize()

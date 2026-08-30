@@ -1,4 +1,4 @@
-# astrbot_plugin_koharu
+# astrbot_plugin_koharu_plus
 
 Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译漫画图片。
 
@@ -16,7 +16,7 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 - 支持 AstrBot WebUI 配置管理。
 - 支持中文和英文 WebUI 文案，资源位于 `.astrbot-plugin/i18n/`。
 - 可选将返回图片压缩为 WebP 或 JPG 后发送。
-- 翻译结果保存到 `data/plugin_data/astrbot_plugin_koharu/outputs/`。
+- 翻译结果保存到 `data/plugin_data/astrbot_plugin_koharu_plus/outputs/`。
 
 ## 前置条件
 
@@ -119,7 +119,7 @@ Koharu manga translation plugin. It translates manga images in AstrBot chats thr
 - Supports AstrBot WebUI configuration.
 - Supports Chinese and English WebUI text under `.astrbot-plugin/i18n/`.
 - Optionally compresses returned images as WebP or JPG before sending.
-- Stores translated output images under `data/plugin_data/astrbot_plugin_koharu/outputs/`.
+- Stores translated output images under `data/plugin_data/astrbot_plugin_koharu_plus/outputs/`.
 
 ## Prerequisites
 

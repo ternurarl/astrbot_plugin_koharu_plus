@@ -50,7 +50,7 @@ except ImportError:  # AstrBot may load plugin files without package context.
     from onebot_client import ForwardNodeContent, QuotedMessageReadError, QuotedMessageReader
 
 
-PLUGIN_NAME = "astrbot_plugin_koharu"
+PLUGIN_NAME = "astrbot_plugin_koharu_plus"
 
 
 @dataclass

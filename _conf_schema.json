@@ -122,7 +122,7 @@
       "永久保留",
       "不保留"
     ],
-    "hint": "控制 data/plugin_data/astrbot_plugin_koharu/outputs/ 下翻译结果图片的清理方式。"
+    "hint": "控制 data/plugin_data/astrbot_plugin_koharu_plus/outputs/ 下翻译结果图片的清理方式。"
   },
   "result_retention_days": {
     "description": "翻译结果保留天数",
