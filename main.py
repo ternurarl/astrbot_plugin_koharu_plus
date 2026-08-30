@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import io
 import shutil
 import time
 import uuid
-from collections.abc import Mapping
+import zipfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
@@ -27,6 +29,7 @@ except Exception:  # pragma: no cover - compatibility fallback for older AstrBot
 
 try:
     from .koharu_client import (
+        IMAGE_EXTENSIONS,
         AppConfig,
         KoharuApiError,
         KoharuClient,
@@ -36,6 +39,7 @@ try:
     )
 except ImportError:  # AstrBot may load plugin files without package context.
     from koharu_client import (
+        IMAGE_EXTENSIONS,
         AppConfig,
         KoharuApiError,
         KoharuClient,
@@ -74,7 +78,7 @@ class QuotedBatch:
     PLUGIN_NAME,
     "ABCwewe+CodeX",
     "使用 Koharu HTTP API 翻译聊天中的漫画图片。",
-    "1.6.6",
+    "1.6.7",
 )
 class KoharuMangaTranslatorPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
@@ -546,9 +550,11 @@ class KoharuMangaTranslatorPlugin(Star):
                     project_name_from_response,
                 )
                 try:
-                    cached_image_paths, upload_cache_dir = self._cache_ordered_upload_images(
-                        image_paths
-                    )
+                    (
+                        cached_image_paths,
+                        upload_cache_dir,
+                        source_white_ratios,
+                    ) = self._cache_ordered_upload_images(image_paths)
                     try:
                         logger.debug(
                             "[koharu-plugin] uploading pages count=%d cache_dir=%s paths=%s",
@@ -582,6 +588,13 @@ class KoharuMangaTranslatorPlugin(Star):
                         "[koharu-plugin] export received bytes=%d content_type=%s",
                         len(content),
                         content_type,
+                    )
+                    content, content_type = await self._guard_rendered_export(
+                        client,
+                        request_id,
+                        content,
+                        content_type,
+                        source_white_ratios,
                     )
                     output_paths = save_exported_images(
                         content,
@@ -705,23 +718,33 @@ class KoharuMangaTranslatorPlugin(Star):
         logger.debug("[koharu-plugin] pipeline steps from koharu config=%s", steps)
         return steps
 
-    def _cache_ordered_upload_images(self, image_paths: list[str]) -> tuple[list[str], Path]:
+    def _cache_ordered_upload_images(
+        self, image_paths: list[str]
+    ) -> tuple[list[str], Path, list[float | None]]:
+        """缓存上传图片副本,并顺带计算每张源图的白占比基准(导出守卫用)。
+
+        返回 (缓存路径列表, 缓存目录, 源图白占比列表)。白占比与缓存路径
+        按下标对齐;源图无法解析时对应基准为 None(守卫走绝对阈值兜底)。
+        """
         upload_cache_dir = self._data_dir / "uploads" / uuid.uuid4().hex
         cached_paths: list[str] = []
+        source_white_ratios: list[float | None] = []
         try:
             upload_cache_dir.mkdir(parents=True, exist_ok=False)
             for index, image_path in enumerate(image_paths, start=1):
                 source = Path(image_path)
+                source_white_ratios.append(_source_white_ratio(source))
                 suffix = source.suffix or ".jpg"
                 target = upload_cache_dir / f"{index}{suffix}"
                 shutil.copy2(source, target)
                 cached_paths.append(str(target))
             logger.debug(
-                "[koharu-plugin] cached ordered upload images dir=%s paths=%s",
+                "[koharu-plugin] cached ordered upload images dir=%s paths=%s source_white=%s",
                 upload_cache_dir,
                 [_safe_path(path) for path in cached_paths],
+                source_white_ratios,
             )
-            return cached_paths, upload_cache_dir
+            return cached_paths, upload_cache_dir, source_white_ratios
         except Exception:
             self._delete_upload_cache(upload_cache_dir)
             raise
@@ -737,6 +760,91 @@ class KoharuMangaTranslatorPlugin(Star):
                 upload_cache_dir,
                 exc,
             )
+
+    async def _guard_rendered_export(
+        self,
+        client: KoharuClient,
+        request_id: str,
+        content: bytes,
+        content_type: str,
+        source_white_ratios: Sequence[float | None],
+    ) -> tuple[bytes, str]:
+        """成品守卫:检测渲染缺背景层(白底只有文字)并重试导出一次。
+
+        0.66 渲染器在场景快照缺 source 资产时静默跳过背景层,导出 PNG
+        呈大面积透明;压缩铺白后即 08-14 事故的「白底只有文字」成品。
+        透明占比是硬信号,白占比与源图基准(缺失时用绝对阈值兜底)对比
+        是软信号。命中则告警并重试导出;仍失败的两次导出中返回较优的
+        一次(宁可发图也不中断翻译),并记录 error 附 request_id。
+        """
+        if not self._bool_conf("guard_blank_retry"):
+            return content, content_type
+        try:
+            suspicious, stats = _render_guard_issues(
+                content,
+                content_type,
+                source_white_ratios,
+                self._float_conf("guard_max_white_absolute"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[koharu-plugin] export guard: unable to inspect render "
+                "request_id=%s error=%s; skipping guard",
+                request_id,
+                exc,
+            )
+            return content, content_type
+        if not suspicious:
+            return content, content_type
+        logger.warning(
+            "[koharu-plugin] export guard: suspicious render request_id=%s "
+            "transparent=%.2f white=%.2f source_white=%s",
+            request_id,
+            max(transparent for transparent, _ in stats),
+            max(white for _, white in stats),
+            list(source_white_ratios),
+        )
+        await asyncio.sleep(1)
+        try:
+            retry_content, retry_content_type = await client.export_project("rendered")
+            retry_suspicious, retry_stats = _render_guard_issues(
+                retry_content,
+                retry_content_type,
+                source_white_ratios,
+                self._float_conf("guard_max_white_absolute"),
+            )
+        except Exception as exc:
+            logger.error(
+                "[koharu-plugin] export guard: retry export failed "
+                "request_id=%s error=%s; keeping first export",
+                request_id,
+                exc,
+            )
+            return content, content_type
+        if not retry_suspicious:
+            logger.info(
+                "[koharu-plugin] export guard: retry recovered request_id=%s; using retry export",
+                request_id,
+            )
+            return retry_content, retry_content_type
+        max_white_absolute = self._float_conf("guard_max_white_absolute")
+        first_score = _render_guard_score(stats, source_white_ratios, max_white_absolute)
+        retry_score = _render_guard_score(
+            retry_stats, source_white_ratios, max_white_absolute
+        )
+        better = (
+            (retry_content, retry_content_type)
+            if retry_score < first_score
+            else (content, content_type)
+        )
+        logger.error(
+            "[koharu-plugin] export guard: retry still suspicious request_id=%s "
+            "first_score=%.3f retry_score=%.3f; sending better export",
+            request_id,
+            first_score,
+            retry_score,
+        )
+        return better
 
     def _compress_output_images_if_enabled(
         self,
@@ -932,6 +1040,8 @@ class PluginConfig(TypedDict):
     return_image_quality: int
     close_project_after_export: bool
     delete_project_after_export: bool
+    guard_blank_retry: bool
+    guard_max_white_absolute: float
     result_retention_policy: str
     result_retention_days: int
     # --- Koharu 0.66 持久化配置（PATCH /config） ---
@@ -968,6 +1078,8 @@ DEFAULT_CONFIG: PluginConfig = {
     "return_image_quality": 85,
     "close_project_after_export": True,
     "delete_project_after_export": True,
+    "guard_blank_retry": True,
+    "guard_max_white_absolute": 0.9,
     "result_retention_policy": "days",
     "result_retention_days": 7,
     # --- Koharu 0.66 持久化配置默认值（留空=不覆盖服务端对应字段） ---
@@ -1061,6 +1173,136 @@ def _prepare_jpeg_image(image: PILImage.Image) -> PILImage.Image:
     background = Image.new("RGB", rgba.size, (255, 255, 255))
     background.paste(rgba, mask=rgba.getchannel("A"))
     return background
+
+
+# --- 成品守卫（渲染缺背景层检测） ---------------------------------------------------
+
+# 渲染缺背景层的硬信号阈值:导出 PNG 透明占比超过该值即判定异常。
+_GUARD_TRANSPARENT_LIMIT = 0.05
+# 软信号阈值:渲染白占比超过源图基准该余量即判定异常(纯白页面靠基准免疫误报)。
+_GUARD_WHITE_EXCESS_LIMIT = 0.30
+
+
+def _render_quality_stats(image: PILImage.Image) -> tuple[float, float]:
+    """返回 (透明占比, 铺白后白像素占比)。0.66 渲染 PNG 正常时应接近 (0, 源图白占比)。"""
+    from PIL import Image
+
+    rgba = image.convert("RGBA")
+    a = rgba.getchannel("A")
+    total = a.width * a.height
+    transparent = 1.0 - sum(a.histogram()[1:]) / total
+    rgb = Image.new("RGB", rgba.size, (255, 255, 255))
+    rgb.paste(rgba, mask=a)
+    hist = rgb.convert("L").histogram()
+    white = sum(hist[241:]) / total
+    return transparent, white
+
+
+def _source_white_ratio(image_path: Path) -> float | None:
+    """源图白占比基准(导出守卫用);解析失败返回 None(守卫走绝对阈值兜底)。"""
+    try:
+        from PIL import Image
+
+        with Image.open(image_path) as image:
+            return _render_quality_stats(image)[1]
+    except Exception as exc:
+        logger.debug(
+            "[koharu-plugin] failed to compute source white ratio path=%s error=%s",
+            image_path,
+            exc,
+        )
+        return None
+
+
+def _export_images_from_content(content: bytes, content_type: str) -> list[PILImage.Image]:
+    """把导出字节解析为图片列表(zip 多页或单图),用于成品守卫质检。"""
+    from PIL import Image
+
+    images: list[PILImage.Image] = []
+    if "zip" in content_type.lower() or content.startswith(b"PK\x03\x04"):
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            for member in archive.infolist():
+                if member.is_dir():
+                    continue
+                if Path(member.filename).suffix.lower() not in IMAGE_EXTENSIONS:
+                    continue
+                with archive.open(member) as source:
+                    images.append(Image.open(io.BytesIO(source.read())))
+    else:
+        images.append(Image.open(io.BytesIO(content)))
+    return images
+
+
+def _render_guard_issues(
+    content: bytes,
+    content_type: str,
+    source_white_ratios: Sequence[float | None],
+    max_white_absolute: float,
+) -> tuple[bool, list[tuple[float, float]]]:
+    """检查渲染导出是否缺背景层(透明占比硬信号 + 白占比超基准软信号)。
+
+    返回 (是否可疑, 每页 (transparent, white) 统计)。无法解析的页面跳过
+    不计入可疑——守卫宁可漏报也不阻断正常导出;全部无法解析视为不可疑。
+    """
+    try:
+        images = _export_images_from_content(content, content_type)
+    except Exception as exc:
+        logger.warning(
+            "[koharu-plugin] export guard: cannot parse render content_type=%s error=%s; "
+            "treating as not suspicious",
+            content_type,
+            exc,
+        )
+        return False, []
+    stats: list[tuple[float, float]] = []
+    baselines: list[float | None] = []
+    for page_index, image in enumerate(images):
+        baseline = (
+            source_white_ratios[page_index]
+            if page_index < len(source_white_ratios)
+            else None
+        )
+        try:
+            stats.append(_render_quality_stats(image))
+            baselines.append(baseline)
+        except Exception as exc:
+            logger.debug(
+                "[koharu-plugin] export guard: skipped unreadable page index=%d error=%s",
+                page_index,
+                exc,
+            )
+    if not stats:
+        return False, stats
+    suspicious = False
+    for (transparent, white), baseline in zip(stats, baselines):
+        if transparent > _GUARD_TRANSPARENT_LIMIT:
+            suspicious = True
+            continue
+        if baseline is not None:
+            if white > baseline + _GUARD_WHITE_EXCESS_LIMIT:
+                suspicious = True
+        elif white > max_white_absolute:
+            suspicious = True
+    return suspicious, stats
+
+
+def _render_guard_score(
+    stats: list[tuple[float, float]],
+    source_white_ratios: Sequence[float | None],
+    max_white_absolute: float,
+) -> float:
+    """导出批次的「缺背景层」严重度评分:透明占比 + 白占比超出基准的余量。
+
+    分值越低越接近源图,用于两次异常导出中挑选较优者。
+    """
+    score = 0.0
+    for index, (transparent, white) in enumerate(stats):
+        baseline = (
+            source_white_ratios[index] if index < len(source_white_ratios) else None
+        )
+        expected = baseline if baseline is not None else max_white_absolute
+        score += transparent + max(0.0, white - expected)
+    return score
 
 
 def _image_has_alpha(image: PILImage.Image) -> bool:

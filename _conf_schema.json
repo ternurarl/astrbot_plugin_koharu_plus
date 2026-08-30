@@ -108,6 +108,18 @@
     "default": true,
     "hint": "关闭项目后再调用 DELETE /projects/{name} 彻底删除项目文件夹，避免 Koharu 端残留。"
   },
+  "guard_blank_retry": {
+    "description": "成品守卫：空白渲染检测与重试",
+    "type": "bool",
+    "default": true,
+    "hint": "导出后检测渲染成品是否缺背景层（“白底只有文字”）：透明占比 > 5% 为硬信号，或白占比超过源图基准 +0.30（源图基准不可用时用绝对阈值兜底）。命中则告警并重试导出一次；仍异常时发送较优的一次并记录错误。关闭则完全跳过守卫。"
+  },
+  "guard_max_white_absolute": {
+    "description": "成品守卫：白占比绝对阈值（兜底）",
+    "type": "float",
+    "default": 0.9,
+    "hint": "仅当源图白占比基准不可用（源图无法解析）时生效：渲染白占比超过该值即判定为异常。调试可临时设为 0 强制触发守卫。"
+  },
   "result_retention_policy": {
     "description": "翻译结果缓存策略",
     "type": "string",

@@ -2,7 +2,7 @@ name: astrbot_plugin_koharu_plus
 display_name: Koharu 漫画翻译
 desc: 使用 Koharu HTTP API 翻译聊天中的漫画图片。
 short_desc: 使用 Koharu 翻译漫画图片。
-version: v1.6.6
+version: v1.6.7
 author: ABCwewe & CodeX
 repo: "https://github.com/ternurarl/astrbot_plugin_koharu_plus"
 astrbot_version: ">=4.9.2"

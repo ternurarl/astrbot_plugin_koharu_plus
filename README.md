@@ -21,7 +21,7 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 ## 前置条件
 
 - 请先完成 `Koharu(>=0.66.0, headless)` 本体部署（0.66 重建后 REST API 仅在 headless 模式提供）。
-- 部署仓库：[ternurarl/koharu-docker](https://github.com/ternurarl/koharu-docker)（dev 分支）
+- 部署仓库：[ternurarl/koharu-docker](https://github.com/ternurarl/koharu-docker)
 - 插件在 AstrBot 容器内访问 Koharu 时使用 Docker 网络名，如 `http://koharu-headless:4000/api/v1`。
 
 插件可接受 `http://host:port` 或 `http://host:port/api/v1`。

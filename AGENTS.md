@@ -55,7 +55,7 @@ Normal Python, AstrBot plugin, and Git practices are assumed.
 
 - All Koharu HTTP interactions go through `KoharuClient`; translate errors into
   `KoharuApiError`/`KoharuTimeoutError` rather than leaking httpx exceptions to handlers.
-- Treat the koharu-docker repo (`../koharu-docker`, https://github.com/ternurarl/koharu-docker/tree/dev) as
+- Treat the koharu-docker repo (`../koharu-docker`, https://github.com/ternurarl/koharu-docker) as
   the source of truth for the API contract. When endpoints or payloads change, update the
   client, and verify against a running instance.
 
