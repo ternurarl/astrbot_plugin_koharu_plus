@@ -3,6 +3,12 @@
 本文件记录所有用户可见的变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 版本号遵循语义化版本，与 `metadata.yaml` / `main.py` 中的版本保持一致。
 
+## [v1.7.0] - 2026-08-31
+
+### Changed
+
+- 插件显示名称由「Koharu 漫画翻译」改为「Koharu 漫画翻译PLUS」。
+
 ## [v1.6.7] - 2026-08-15
 
 ### Added
