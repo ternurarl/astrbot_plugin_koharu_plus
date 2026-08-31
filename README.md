@@ -4,6 +4,12 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 
 > 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
+## 优点
+
+相比于上游插件，本插件适配更新的 Koharu 后端。Koharu 维护者已移除 Docker 支持，经沟通得知是其精力有限、难以兼顾；于是我自己依据源码重新构建出 headless Koharu 后端，可在无 GPU 的廉价服务器上运行。
+
+以我本机（i3-8100）纯 CPU 环境实测，同一页的处理耗时从 0.61 版（默认检测 + Manga OCR）的总共约 390 秒，降到 0.66 版（Koharu Layout RF-DETR Seg 2XL 检测 + Baberu OCR 识别）的总共约 40 秒。
+
 ## 功能
 
 - 使用指令 `漫画翻译` 触发漫画图片翻译。
@@ -106,6 +112,12 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 Koharu manga translation plugin. It translates manga images in AstrBot chats through the Koharu HTTP API.
 
 > See [CHANGELOG.md](./CHANGELOG.md) for the change log.
+
+## Advantages
+
+Compared with the upstream plugin, this plugin adapts a newer Koharu backend. The Koharu maintainer has dropped Docker support (they told us they could no longer keep up), so I rebuilt the headless Koharu backend from the source code instead; it runs well on cheap servers without a GPU.
+
+Measured on my own machine (i3-8100, pure CPU): processing the same page took about 390 seconds in total on v0.61 (default detection + Manga OCR), down to about 40 seconds on v0.66 (Koharu Layout RF-DETR Seg 2XL detection + Baberu OCR).
 
 ## Features
 
