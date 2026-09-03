@@ -22,6 +22,7 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 - 支持 AstrBot WebUI 配置管理。
 - 支持中文和英文 WebUI 文案，资源位于 `.astrbot-plugin/i18n/`。
 - 可选将返回图片压缩为 WebP 或 JPG 后发送。
+- 逐张发送翻译图片失败后重试 2 次（共 3 次尝试），每次重试间隔 1 秒；连续失败的图片会跳过，插件继续发送剩余图片，并在结束时汇总报告失败图片。
 - 翻译结果保存到 `data/plugin_data/astrbot_plugin_koharu_plus/outputs/`。
 
 ## 前置条件
@@ -72,6 +73,7 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 - `pipeline_timeout_seconds`：等待 Koharu 翻译完成的最长时间。
 - `max_images_per_request`：单次输入图片数限制。
 - `max_send_images`：最多返回图片数，`0` 表示全部返回。
+- `use_direct_file_transfer`：是否在逐张发送翻译图片时直接向 OneBot 传递图片文件路径，默认关闭。启用后，AstrBot 与 NapCat 必须能访问同一个绝对路径；关闭时使用 Base64 传输。
 - `compress_return_images`：是否在发送前压缩返回图片，默认关闭。
 - `return_image_format`：压缩返回图片格式，可选 `webp` 或 `jpg`。
 - `return_image_quality`：压缩质量，范围 `1-100`，默认 `85`。
@@ -92,7 +94,8 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 
 引用（回复）一条消息后发送 `/漫画翻译 [目标语言]`，插件会自动翻译被引用消息中的漫画图片：
 
-- 被引用消息为普通消息（含一张或多张图片）时，翻译完成后逐张单独发送译文图片，无额外提示文字。
+- 被引用消息为普通消息（含一张或多张图片）时，翻译完成后逐张单独发送译文图片；全部发送成功时无额外提示文字，存在发送失败时会在结束后发送失败汇总。
+- 逐张发送译文图片时，单张图片首次发送失败后重试 2 次（共 3 次尝试），每次重试间隔 1 秒；单张图片连续失败时会被跳过，插件继续发送剩余图片，并在发送结束后汇总报告失败图片。
 - 被引用消息为合并转发聊天记录时，插件读取转发记录中所有含图片的消息节点，按队列自动翻译，完成后以同样的合并转发聊天记录格式输出译文（只保留含图片的节点，每个节点仅包含译文图片，原文字内容丢弃；纯文本节点不输出）。
 - 合并转发记录中嵌套的聊天记录（记录里出现“[聊天记录]”占位）会被递归读取，其中的图片同样参与翻译，并按原始记录顺序展开为对应节点。
 - 引用存在但被引用消息中没有图片时，会提示“未能从被引用消息中提取到图片”。
@@ -131,6 +134,7 @@ Measured on my own machine (i3-8100, pure CPU): processing the same page took ab
 - Supports AstrBot WebUI configuration.
 - Supports Chinese and English WebUI text under `.astrbot-plugin/i18n/`.
 - Optionally compresses returned images as WebP or JPG before sending.
+- When sending translated images one by one, retries a failed image 2 times after the initial attempt (3 attempts total) with a 1-second interval; skips an image after all attempts fail, continues sending the remaining images, and reports all failed images in a final summary.
 - Stores translated output images under `data/plugin_data/astrbot_plugin_koharu_plus/outputs/`.
 
 ## Prerequisites
@@ -188,6 +192,7 @@ and are replayed automatically. Use `/koharu-config` to replay manually.
 - `pipeline_timeout_seconds`: Maximum time to wait for Koharu translation completion.
 - `max_images_per_request`: Limit for input image count per request.
 - `max_send_images`: Maximum number of images to send back. `0` means send all images.
+- `use_direct_file_transfer`: Whether to pass image file paths directly to OneBot when sending images one by one. Disabled by default. When enabled, AstrBot and NapCat must access the same absolute path; when disabled, use Base64 transfer.
 - `compress_return_images`: Whether to compress returned images before sending. Disabled by default.
 - `return_image_format`: Compressed return image format. Available values: `webp`, `jpg`.
 - `return_image_quality`: Compression quality. Range: `1-100`. Default: `85`.
@@ -208,7 +213,8 @@ If the command message has no attached image, the plugin waits for the next imag
 
 Reply to (quote) a message and send `/漫画翻译 [target language]`; the plugin automatically translates manga images in the quoted message:
 
-- If the quoted message is a normal message (one or more images), the translated images are sent one by one after translation completes, without any extra text.
+- If the quoted message is a normal message (one or more images), the translated images are sent one by one after translation completes; no extra text is sent when all images succeed, and a failure summary is sent at the end when any image fails.
+- When translated images are sent one by one, a failed image is retried 2 times after the initial attempt (3 attempts total), with a 1-second interval. An image that fails all attempts is skipped, the remaining images continue to send, and the plugin reports all failed images in a final summary.
 - If the quoted message is a merged-forward chat record, the plugin reads all image-bearing message nodes, translates them in queue order, and returns the result in the same merged-forward format (only image-bearing nodes are kept; each node contains only the translated image, the original text is discarded, and text-only nodes are omitted).
 - If the quoted message contains no images, the plugin replies that it could not extract any images from the quoted message.
 - Reading and outputting merged-forward chat records depends on the OneBot v11 platform (aiocqhttp / NapCat); on other platforms the plugin notifies you that this is unsupported.

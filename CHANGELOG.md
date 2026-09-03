@@ -3,6 +3,16 @@
 本文件记录所有用户可见的变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 版本号遵循语义化版本，与 `metadata.yaml` / `main.py` 中的版本保持一致。
 
+## [v1.8.0] - 2026-09-04
+
+### Added
+
+- 新增 `use_direct_file_transfer` 配置项。启用后，逐张发送翻译图片时直接向 OneBot 传递图片文件路径；AstrBot 与 NapCat 必须能访问同一个绝对路径，关闭（默认）时使用 Base64 传输。
+
+### Fixed
+
+- 逐张发送翻译图片失败后重试 2 次（共 3 次尝试），每次重试间隔 1 秒；单张图片连续失败时跳过并继续发送剩余图片，完成后汇总报告失败图片。
+
 ## [v1.7.0] - 2026-08-31
 
 ### Changed

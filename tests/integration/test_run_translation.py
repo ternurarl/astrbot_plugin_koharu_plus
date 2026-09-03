@@ -9,6 +9,7 @@ from typing import cast
 import pytest
 
 import astrbot.api.message_components as Comp
+import main
 
 from _fakes import (
     FakeEvent,
@@ -227,3 +228,53 @@ async def test_success_forward_sends_nodes_chain_and_cleans_up(
     assert called == [(["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"], "Simplified Chinese")]
     assert cleanup_current_calls == [outputs]
     assert cleanup_cache_calls == [True]
+
+
+async def test_image_send_and_summary_failures_still_clean_up_and_release_queue(
+    make_plugin: MakePlugin,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """发送图片三次失败且汇总消息失败时,清理仍执行且队列仍释放。"""
+    plugin = make_plugin(
+        overrides={"use_direct_file_transfer": False, "queue_depth": 0}
+    )
+    outputs = ["/out/failed.png"]
+    called = _install_fake_translate(plugin, monkeypatch, outputs)
+
+    cleanup_current_calls: list[list[str]] = []
+    cleanup_cache_calls: list[bool] = []
+
+    def fake_cleanup_current(output_paths: list[str]) -> None:
+        cleanup_current_calls.append(output_paths)
+
+    def fake_cleanup_cache() -> None:
+        cleanup_cache_calls.append(True)
+
+    monkeypatch.setattr(plugin, "_cleanup_current_outputs_if_needed", fake_cleanup_current)
+    monkeypatch.setattr(plugin, "_cleanup_output_cache", fake_cleanup_cache)
+
+    async def fake_sleep(seconds: float) -> None:
+        assert seconds == 1
+
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+    event = FakeEvent(
+        [],
+        send_errors=[
+            None,  # 确认消息成功
+            RuntimeError("image attempt 1"),
+            RuntimeError("image attempt 2"),
+            RuntimeError("image attempt 3"),
+            RuntimeError("summary send failed"),
+        ],
+    )
+    batch = QuotedBatch(image_paths=["/tmp/a.png"])
+
+    await run_translation(plugin, event, batch, "Simplified Chinese")
+
+    assert called == [(["/tmp/a.png"], "Simplified Chinese")]
+    assert event.send_attempts == 5
+    assert event.sent_texts == ["已收到 1 张图片，开始调用 Koharu 翻译为 简体中文。"]
+    assert cleanup_current_calls == [outputs]
+    assert cleanup_cache_calls == [True]
+    await asyncio.wait_for(queue_semaphore(plugin).acquire(), timeout=1)
+    queue_semaphore(plugin).release()

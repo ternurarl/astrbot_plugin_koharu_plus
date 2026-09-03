@@ -49,9 +49,19 @@ except ImportError:  # AstrBot may load plugin files without package context.
     )
 
 try:
-    from .onebot_client import ForwardNodeContent, QuotedMessageReadError, QuotedMessageReader
+    from .onebot_client import (
+        ForwardNodeContent,
+        OneBotClient,
+        QuotedMessageReadError,
+        QuotedMessageReader,
+    )
 except ImportError:  # AstrBot may load plugin files without package context.
-    from onebot_client import ForwardNodeContent, QuotedMessageReadError, QuotedMessageReader
+    from onebot_client import (
+        ForwardNodeContent,
+        OneBotClient,
+        QuotedMessageReadError,
+        QuotedMessageReader,
+    )
 
 
 PLUGIN_NAME = "astrbot_plugin_koharu_plus"
@@ -270,11 +280,17 @@ class KoharuMangaTranslatorPlugin(Star):
                 len(output_paths),
             )
             if batch.forward_nodes is not None:
-                await self._send_forward_result(event, batch, output_paths)
+                try:
+                    await self._send_forward_result(event, batch, output_paths)
+                finally:
+                    self._cleanup_current_outputs_if_needed(output_paths)
+                    self._cleanup_output_cache()
             else:
-                await self._send_one_by_one(event, output_paths)
-            self._cleanup_current_outputs_if_needed(output_paths)
-            self._cleanup_output_cache()
+                try:
+                    await self._send_one_by_one(event, output_paths)
+                finally:
+                    self._cleanup_current_outputs_if_needed(output_paths)
+                    self._cleanup_output_cache()
         finally:
             self._release_queue()
 
@@ -319,8 +335,52 @@ class KoharuMangaTranslatorPlugin(Star):
         """非转发场景：翻译结果逐张单独发送，无提示文字。"""
         max_send = self._int_conf("max_send_images")
         selected = output_paths if max_send <= 0 else output_paths[:max_send]
-        for path in selected:
-            await event.send(event.image_result(path))
+        direct_file_transfer = self._bool_conf("use_direct_file_transfer")
+        onebot_client = OneBotClient(self.context) if direct_file_transfer else None
+        failed_positions: list[int] = []
+        for position, path in enumerate(selected, start=1):
+            sent = False
+            for attempt in range(1, 4):
+                try:
+                    if onebot_client is None:
+                        await event.send(event.image_result(path))
+                    else:
+                        await onebot_client.send_image(event, path)
+                    sent = True
+                    break
+                except Exception as exc:
+                    if attempt < 3:
+                        logger.warning(
+                            "[koharu-plugin] image send failed; retrying "
+                            "path=%s attempt=%d/3 error=%s",
+                            _safe_path(path),
+                            attempt,
+                            exc,
+                        )
+                        await asyncio.sleep(1)
+                    else:
+                        logger.exception(
+                            "[koharu-plugin] image send failed after 3 attempts "
+                            "path=%s",
+                            _safe_path(path),
+                        )
+            if not sent:
+                failed_positions.append(position)
+        if failed_positions:
+            positions = "、".join(str(position) for position in failed_positions)
+            try:
+                await event.send(
+                    event.plain_result(
+                        f"第 {positions} 张翻译图片发送失败，已跳过。"
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[koharu-plugin] failed to send image failure summary "
+                    "failed_count=%d error=%s",
+                    len(failed_positions),
+                    exc,
+                )
 
     async def _try_extract_image_batch(self, event: AstrMessageEvent) -> QuotedBatch | None:
         """提取图片批次;读取被引用消息失败时向用户播报错误并返回 None。"""
@@ -1034,6 +1094,7 @@ class PluginConfig(TypedDict):
     http_connect_timeout_seconds: int
     max_images_per_request: int
     max_send_images: int
+    use_direct_file_transfer: bool
     queue_depth: int
     compress_return_images: bool
     return_image_format: str
@@ -1072,6 +1133,7 @@ DEFAULT_CONFIG: PluginConfig = {
     "http_connect_timeout_seconds": 10,
     "max_images_per_request": 20,
     "max_send_images": 0,
+    "use_direct_file_transfer": False,
     "queue_depth": 3,
     "compress_return_images": False,
     "return_image_format": "webp",

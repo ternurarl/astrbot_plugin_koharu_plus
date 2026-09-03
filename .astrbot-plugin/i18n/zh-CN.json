@@ -83,6 +83,10 @@
       "description": "最多返回图片数",
       "hint": "填 0 表示返回全部渲染图片。"
     },
+    "use_direct_file_transfer": {
+      "description": "逐张直接传递图片文件路径",
+      "hint": "仅影响逐张发送翻译图片。启用后向 OneBot 传递本地图片文件路径，AstrBot 与 NapCat 必须能访问同一个绝对路径；关闭（默认）时使用 Base64 传输。"
+    },
     "queue_depth": {
       "description": "翻译请求队列深度",
       "hint": "同时等待翻译的最大请求数。并发固定为 1，超出队列深度的请求将被直接拒绝。填 0 表示不允许排队。"

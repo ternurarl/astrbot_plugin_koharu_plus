@@ -28,6 +28,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.star import Context
 
 __all__ = [
+    "OneBotClient",
     "OneBotBot",
     "OneBotSegmentData",
     "OneBotSegment",
@@ -39,6 +40,7 @@ __all__ = [
     "QuotedMessageContent",
     "QuotedMessageReader",
     "QuotedMessageReadError",
+    "OneBotSendError",
 ]
 
 # 合并转发嵌套深度上限:防止畸形记录构造深链导致递归过深。
@@ -47,6 +49,10 @@ _MAX_FORWARD_DEPTH = 10
 
 class QuotedMessageReadError(RuntimeError):
     """读取被引用消息 / 合并转发消息失败(含平台不支持)。消息可直接展示给用户。"""
+
+
+class OneBotSendError(RuntimeError):
+    """通过 OneBot 直接发送消息失败。"""
 
 
 
@@ -128,11 +134,64 @@ class QuotedMessageContent:
     forward_nodes: list[ForwardNodeContent]
 
 
-class QuotedMessageReader:
-    """通过 OneBot API 读取被引用消息与合并转发消息。"""
+class OneBotClient:
+    """通过 OneBot API 读取消息或发送不经 AstrBot 编码的消息。"""
 
     def __init__(self, context: Context) -> None:
         self.context = context
+
+    async def send_image(self, event: AstrMessageEvent, file: str) -> None:
+        """直接发送一个图片消息段,保留本地路径或 URL 给 OneBot 实现端处理。"""
+        try:
+            bot = self._resolve_send_bot(event)
+            message: list[OneBotSegment] = [
+                {"type": "image", "data": {"file": file}},
+            ]
+            group_id: str = event.get_group_id()
+            if group_id:
+                await bot.call_action(
+                    "send_group_msg",
+                    group_id=group_id,
+                    message=message,
+                )
+                return
+            user_id: str = event.get_sender_id()
+            await bot.call_action(
+                "send_private_msg",
+                user_id=user_id,
+                message=message,
+            )
+        except OneBotSendError:
+            raise
+        except Exception as exc:
+            raise OneBotSendError(f"直接发送图片失败:{exc}") from exc
+
+    def _resolve_send_bot(self, event: AstrMessageEvent) -> OneBotBot:
+        platform_id: str = event.get_platform_id()
+        inst = self.context.get_platform_inst(platform_id)
+        if inst is None:
+            raise OneBotSendError("当前平台不支持直接发送图片。")
+        bot = getattr(inst, "bot", None)
+        if not isinstance(bot, OneBotBot):
+            raise OneBotSendError("当前平台不支持直接发送图片。")
+        return bot
+
+    def _resolve_bot(self, event: AstrMessageEvent) -> OneBotBot:
+        # get_platform_id 在 AstrBot SDK 中无返回类型注解(在本地 SDK 中可推断为 str),
+        # 此处做显式注解边界处理。
+        platform_id: str = event.get_platform_id()
+        inst = self.context.get_platform_inst(platform_id)
+        if inst is None:
+            raise QuotedMessageReadError("当前平台不支持读取转发消息内容。")
+        # aiocqhttp 适配器实例的 OneBot API 对象是 .bot(CQHttp),而非适配器本身。
+        bot = getattr(inst, "bot", None)
+        if not isinstance(bot, OneBotBot):
+            raise QuotedMessageReadError("当前平台不支持读取转发消息内容。")
+        return bot
+
+
+class QuotedMessageReader(OneBotClient):
+    """通过 OneBot API 读取被引用消息与合并转发消息。"""
 
     async def fetch_forward(
         self,
@@ -407,20 +466,6 @@ class QuotedMessageReader:
         if not isinstance(result, dict):
             raise QuotedMessageReadError(f"{error_prefix}:响应格式异常(非 dict)")
         return cast(dict[str, object], result)
-
-    def _resolve_bot(self, event: AstrMessageEvent) -> OneBotBot:
-        # get_platform_id 在 AstrBot SDK 中无返回类型注解(在本地 SDK 中可推断为 str),
-        # 此处做显式注解边界处理。
-        platform_id: str = event.get_platform_id()
-        inst = self.context.get_platform_inst(platform_id)
-        if inst is None:
-            raise QuotedMessageReadError("当前平台不支持读取转发消息内容。")
-        # aiocqhttp 适配器实例的 OneBot API 对象是 .bot(CQHttp),而非适配器本身。
-        bot = getattr(inst, "bot", None)
-        if not isinstance(bot, OneBotBot):
-            raise QuotedMessageReadError("当前平台不支持读取转发消息内容。")
-        return bot
-
 
 def _extract_image_segment(segment: object) -> Comp.Image | None:
     """只提取 image 段;其他段(text/face/at 等)与畸形段一律忽略。"""

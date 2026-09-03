@@ -101,14 +101,21 @@ class FakeEvent:
         sender_id: str = "10001",
         session_id: str = "session-1",
         platform_id: str = "aiocqhttp",
+        group_id: str = "",
         send_error: Exception | None = None,
+        send_errors: list[Exception | None] | None = None,
     ) -> None:
         self._messages: list[Comp.BaseMessageComponent] = list(messages)
         self.message_str: str = message_str
         self._sender_id: str = sender_id
         self._session_id: str = session_id
         self._platform_id: str = platform_id
+        self._group_id: str = group_id
         self.send_error: Exception | None = send_error
+        self._send_errors: list[Exception | None] | None = (
+            list(send_errors) if send_errors is not None else None
+        )
+        self.send_attempts: int = 0
         self.sent_chains: list[list[Comp.BaseMessageComponent]] = []
 
     def get_messages(self) -> list[Comp.BaseMessageComponent]:
@@ -123,6 +130,9 @@ class FakeEvent:
     def get_platform_id(self) -> str:
         return self._platform_id
 
+    def get_group_id(self) -> str:
+        return self._group_id
+
     def plain_result(self, text: str) -> FakeResult:
         return FakeResult([Comp.Plain(text)])
 
@@ -133,8 +143,15 @@ class FakeEvent:
         return FakeResult(chain)
 
     async def send(self, result: FakeResult) -> None:
-        if self.send_error is not None:
-            raise self.send_error
+        self.send_attempts += 1
+        if self._send_errors is not None:
+            if not self._send_errors:
+                raise AssertionError("send error sequence exhausted")
+            error = self._send_errors.pop(0)
+        else:
+            error = self.send_error
+        if error is not None:
+            raise error
         self.sent_chains.append(list(result.chain))
 
     @property
@@ -173,7 +190,7 @@ class FakeBot:
         self._responses[action] = response
 
     def preset_sequence(self, action: str, responses: list[object]) -> None:
-        """按序响应:每次调用弹出一个,耗尽后抛 AssertionError。"""
+        """按序返回响应;序列中的异常对象会被抛出,耗尽后抛 AssertionError。"""
         self._sequences[action] = list(responses)
 
     def preset_error(self, action: str, error: Exception) -> None:
@@ -188,7 +205,10 @@ class FakeBot:
             sequence = self._sequences[action]
             if not sequence:
                 raise AssertionError(f"preset sequence exhausted for action {action!r}")
-            return sequence.pop(0)
+            response = sequence.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
         if action in self._responses:
             return self._responses[action]
         raise AssertionError(f"no preset for action {action!r}")

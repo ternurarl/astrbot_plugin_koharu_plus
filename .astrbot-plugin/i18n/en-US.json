@@ -83,6 +83,10 @@
       "description": "Max images sent back",
       "hint": "Use 0 to send all rendered images."
     },
+    "use_direct_file_transfer": {
+      "description": "Pass image file paths directly when sending images one by one",
+      "hint": "Applies only to one-by-one image sending. When enabled, pass the local image path to OneBot; AstrBot and NapCat must access the same absolute path. When disabled (default), use Base64 transfer."
+    },
     "queue_depth": {
       "description": "Translation request queue depth",
       "hint": "Max number of requests waiting for translation. Concurrency is fixed at 1; requests exceeding the queue depth are rejected immediately. Use 0 to disallow queuing."
