@@ -789,13 +789,16 @@ class KoharuMangaTranslatorPlugin(Star):
         upload_cache_dir = self._data_dir / "uploads" / uuid.uuid4().hex
         cached_paths: list[str] = []
         source_white_ratios: list[float | None] = []
+        # koharu 服务端导入时按上传文件名的字典序排序,文件名必须零填充,
+        # 保证字典序等于本方法的编号序(即任务内原始顺序)。
+        name_width = max(3, len(str(len(image_paths))))
         try:
             upload_cache_dir.mkdir(parents=True, exist_ok=False)
             for index, image_path in enumerate(image_paths, start=1):
                 source = Path(image_path)
                 source_white_ratios.append(_source_white_ratio(source))
                 suffix = source.suffix or ".jpg"
-                target = upload_cache_dir / f"{index}{suffix}"
+                target = upload_cache_dir / f"{index:0{name_width}d}{suffix}"
                 shutil.copy2(source, target)
                 cached_paths.append(str(target))
             logger.debug(

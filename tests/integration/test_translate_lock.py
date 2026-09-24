@@ -208,12 +208,12 @@ async def test_concurrent_translate_calls_are_serialized(
     assert len(outputs_a) == 1 and Path(outputs_a[0]).is_file()
     assert len(outputs_b) == 1 and Path(outputs_b[0]).is_file()
     assert outputs_a != outputs_b
-    # 两次请求都真实上传了缓存副本(真实 PNG 文件,名称为 1.png)。
+    # 两次请求都真实上传了缓存副本(真实 PNG 文件,名称零填充为 001.png)。
     assert len(FakeKoharuClient.page_batches) == 2
     for batch in FakeKoharuClient.page_batches:
         assert len(batch) == 1
         assert batch[0][1] is True
-        assert Path(batch[0][0]).name == "1.png"
+        assert Path(batch[0][0]).name == "001.png"
 
 
 async def test_lock_released_after_failure(
