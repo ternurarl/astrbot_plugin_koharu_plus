@@ -156,15 +156,17 @@
       "",
       "baberu-ocr",
       "manga-ocr",
-      "paddleocr-vl-1.6"
+      "paddleocr-vl-1.6",
+      "hayai-ocr"
     ],
     "labels": [
       "不覆盖（用服务端现有）",
       "baberu-ocr",
       "manga-ocr",
-      "paddleocr-vl-1.6"
+      "paddleocr-vl-1.6",
+      "hayai-ocr"
     ],
-    "hint": "持久化到服务端 pipeline.ocr.model。paddleocr-vl-1.6 依赖 llama.cpp，--gpu 模式下不可用。"
+    "hint": "持久化到服务端 pipeline.ocr.model。paddleocr-vl-1.6 依赖 llama.cpp，--gpu 模式下不可用。hayai-ocr 为 Hayai v2.5 Nova。"
   },
   "pipeline_inpainting_model": {
     "description": "修补（inpainting）模型",

@@ -54,7 +54,7 @@ Koharu 漫画翻译插件。通过 Koharu HTTP API 在 AstrBot 聊天中翻译�
 容器重启后直接复用；密钥存 Linux keyring，重启即丢，插件自动重放）。也可用 `/koharu-config`
 指令手动重放。留空/默认值 = 不覆盖服务端对应字段。
 
-- `pipeline_ocr_model`：OCR 模型（baberu-ocr / manga-ocr / paddleocr-vl-1.6）。
+- `pipeline_ocr_model`：OCR 模型（baberu-ocr / manga-ocr / paddleocr-vl-1.6 / hayai-ocr）。持久化到服务端 `pipeline.ocr.model`；paddleocr-vl-1.6 依赖 llama.cpp，--gpu 模式下不可用；hayai-ocr 为 Hayai v2.5 Nova。
 - `pipeline_inpainting_model`：修补模型（lama / aot-inpainting / flux2-klein / rorem-mixed）。
 - `pipeline_inpainting_prompt` / `pipeline_inpainting_negative_prompt`：修补模型 prompt（写入 processor）。
 - `pipeline_detection_text_threshold` / `_bubble_threshold` / `_panel_threshold`：检测置信度阈值（0-1，-1=不覆盖）。
@@ -172,7 +172,7 @@ and are replayed automatically. Use `/koharu-config` to replay manually.
 > `font_families`, ...) are declared values** that are force-aligned at startup and before
 > every translation — leave them empty to let the server decide.
 
-- `pipeline_ocr_model`: OCR model (baberu-ocr / manga-ocr / paddleocr-vl-1.6).
+- `pipeline_ocr_model`: OCR model (baberu-ocr / manga-ocr / paddleocr-vl-1.6 / hayai-ocr). Persisted to the server's `pipeline.ocr.model`; paddleocr-vl-1.6 depends on llama.cpp and is unavailable under --gpu; hayai-ocr is Hayai v2.5 Nova.
 - `pipeline_inpainting_model`: Inpainting model (lama / aot-inpainting / flux2-klein / rorem-mixed).
 - `pipeline_inpainting_prompt` / `pipeline_inpainting_negative_prompt`: Inpainting prompts (written to processor).
 - `pipeline_detection_text_threshold` / `_bubble_threshold` / `_panel_threshold`: Detection confidence thresholds (0-1, -1 = do not override).

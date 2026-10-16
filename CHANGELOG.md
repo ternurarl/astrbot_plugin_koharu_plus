@@ -3,6 +3,12 @@
 本文件记录所有用户可见的变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 版本号遵循语义化版本，与 `metadata.yaml` / `main.py` 中的版本保持一致。
 
+## [v1.9.0] - 2026-10-16
+
+### Added
+
+- `pipeline_ocr_model` 新增可选模型 `hayai-ocr`（Hayai v2.5 Nova），持久化到服务端 `pipeline.ocr.model`。OCR 模型可选值现为 baberu-ocr / manga-ocr / paddleocr-vl-1.6 / hayai-ocr；其中 paddleocr-vl-1.6 依赖 llama.cpp，--gpu 模式下不可用。
+
 ## [v1.8.1] - 2026-09-24
 
 ### Fixed
